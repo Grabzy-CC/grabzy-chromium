@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Turn a checkout of an ungoogled-chromium platform repo into Grabzy.CC.
 
-    python3 apply.py <windows|macos|linux> <checkout>
+    python3 apply.py <windows|macos|linux> <checkout> [release tag]
 
 Copies our patches and branding in, hooks brand.py in right after the patches
 are applied, and points packaging and releases at Grabzy-CC. Every edit looks
 for an exact piece of upstream text and stops if it is not there, so a changed
 build script fails here, in the sync job, and never half way through a build.
-Running it twice changes nothing the second time.
+Running it twice changes nothing the second time. The release tag, when
+given, is compiled into the browser so its updater knows what is running.
 """
 
 import os
@@ -50,7 +51,7 @@ def write(root, path, text):
     log("wrote " + path)
 
 
-def common(root):
+def common(root, tag):
     """Our patches after upstream's, and the branding kit at grabzy/."""
     names = [l.strip() for l in open(os.path.join(HERE, "patches", "series")) if l.strip() and not l.startswith("#")]
     dst = os.path.join(root, "patches", "grabzy")
@@ -69,7 +70,9 @@ def common(root):
     os.makedirs(kit)
     shutil.copyfile(os.path.join(HERE, "branding", "brand.py"), os.path.join(kit, "brand.py"))
     shutil.copytree(os.path.join(HERE, "branding", "files"), os.path.join(kit, "files"))
-    log("branding kit copied to grabzy/")
+    if tag:
+        open(os.path.join(kit, "release.txt"), "w", encoding="utf-8", newline="\n").write(tag + "\n")
+    log("branding kit copied to grabzy/" + (", release " + tag if tag else ""))
 
 
 WINDOWS_BUILD = """name: build-x64
@@ -203,10 +206,10 @@ def linux(root):
 
 
 def main():
-    if len(sys.argv) != 3 or sys.argv[1] not in ("windows", "macos", "linux"):
+    if len(sys.argv) not in (3, 4) or sys.argv[1] not in ("windows", "macos", "linux"):
         sys.exit(__doc__)
     platform, root = sys.argv[1], sys.argv[2]
-    common(root)
+    common(root, sys.argv[3] if len(sys.argv) == 4 else None)
     globals()[platform](root)
     log("done: %s" % platform)
 

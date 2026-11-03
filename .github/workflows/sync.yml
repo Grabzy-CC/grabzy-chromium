@@ -81,7 +81,7 @@ jobs:
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           test -n "$SYNC_TOKEN" || { echo "::error::Add a SYNC_TOKEN secret, see README"; exit 1; }
-          python3 apply.py "${{ matrix.platform }}" upstream 2>&1 | tee -a "$RUNNER_TEMP/check.log"
+          python3 apply.py "${{ matrix.platform }}" upstream "${{ steps.tag.outputs.ours }}" 2>&1 | tee -a "$RUNNER_TEMP/check.log"
           cd upstream
           git config user.name "grabzy-sync"
           git config user.email "grabzy-sync@users.noreply.github.com"

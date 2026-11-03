@@ -16,6 +16,9 @@ library only. It does four things:
    the app, helper and framework bundle names and the signing scripts follow it.
 3. Icons: every file under files/ replaces the file at the same path in the tree.
 4. macOS only: rebuilds mac/Assets.car from the new AppIcon set with actool.
+5. Release tag: when release.txt sits next to this script (apply.py writes it
+   from the tag being built), it goes into chrome/browser/grabzy/release_tag.h,
+   which turns the built-in updater on. Without it the updater stays off.
 
 --check only computes and verifies, and writes nothing.
 """
@@ -204,6 +207,30 @@ def brand_icons(src, write):
 
 # --- 4. macOS asset catalog --------------------------------------------------
 
+RELEASE_TAG_H = "chrome/browser/grabzy/release_tag.h"
+PLACEHOLDER = 'kReleaseTag[] = "dev";'
+
+
+def stamp_release(src, write):
+    """The tag being built goes into the updater, so it knows what is running."""
+    header = os.path.join(src, RELEASE_TAG_H)
+    data = open(header, encoding="utf-8").read()
+    path = os.path.join(HERE, "release.txt")
+    tag = open(path, encoding="utf-8").read().strip() if os.path.exists(path) else None
+    if tag and 'kReleaseTag[] = "%s";' % tag in data:
+        return log("release tag %s already set" % tag)
+    if PLACEHOLDER not in data:
+        sys.exit("[brand] %s: the release tag placeholder is missing" % RELEASE_TAG_H)
+    if not tag:
+        return log("no release.txt, so the updater stays off")
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", tag):
+        sys.exit("[brand] release.txt: %r is not a release tag" % tag)
+    if write:
+        open(header, "w", encoding="utf-8", newline="\n").write(
+            data.replace(PLACEHOLDER, 'kReleaseTag[] = "%s";' % tag))
+    log("release tag " + tag)
+
+
 def brand_asset_catalog(src):
     mac = os.path.join(src, "chrome/app/theme/chromium/mac")
     with tempfile.TemporaryDirectory() as tmp:
@@ -235,6 +262,7 @@ def main():
     brand_strings(src, write)
     brand_file(src, write, mac)
     brand_icons(src, write)
+    stamp_release(src, write)
     if mac and write:
         brand_asset_catalog(src)
     log("done" if write else "check passed")

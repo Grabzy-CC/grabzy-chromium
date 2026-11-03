@@ -19,6 +19,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +42,7 @@ def get(url):
         except Exception as e:  # googlesource throttles bursts now and then
             if attempt == 3:
                 raise SystemExit("[check] %s: %s" % (url, e))
+            time.sleep(10 * 2 ** attempt)
 
 
 def fetch(version, path):
@@ -94,7 +96,7 @@ def main():
     log("Chromium " + version)
 
     ours = series(os.path.join(ROOT, "patches"))
-    files = {p for patch in ours for p, _ in touched(patch)}
+    files = {p for patch in ours for p, text in touched(patch) if not text.startswith("--- /dev/null")}
     files.add("chrome/app/theme/chromium/BRANDING")
     for grd, parts, xtb_glob in brand.STRINGS:
         files.update([grd] + parts)
@@ -126,6 +128,7 @@ def main():
 
     brand.brand_strings(src, write=False)
     brand.brand_file(src, write=False, mac=False)
+    brand.stamp_release(src, write=False)
     log("check passed")
 
 

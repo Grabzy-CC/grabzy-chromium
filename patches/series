@@ -2,3 +2,4 @@
 keep-websocket-pages-out-of-bfcache.patch
 keep-background-timers-awake.patch
 default-to-grabzy-theme.patch
+grabzy-updater.patch
