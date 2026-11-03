@@ -1,0 +1,106 @@
+name: sync
+
+# Every day: if ungoogled-chromium released a new version for a platform, check
+# that our patches and branding still fit it, then tag it in that platform's
+# fork. The tag starts the build there, and the build publishes the release
+# the browsers update from. If anything does not fit, open an issue instead
+# and tag nothing, so users stay on the last good build.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Only this platform (windows, macos or linux); empty for all
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            upstream: ungoogled-software/ungoogled-chromium-windows
+          - platform: macos
+            upstream: ungoogled-software/ungoogled-chromium-macos
+          - platform: linux
+            upstream: ungoogled-software/ungoogled-chromium-portablelinux
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FORK: ${{ github.repository_owner }}/grabzy-chromium-${{ matrix.platform }}
+    steps:
+      - name: Skip unless asked for
+        id: want
+        run: echo "go=${{ inputs.platform == '' || inputs.platform == matrix.platform }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v5
+        if: steps.want.outputs.go == 'true'
+
+      - name: Find upstream's latest release
+        if: steps.want.outputs.go == 'true'
+        id: tag
+        run: |
+          up=$(gh api "repos/${{ matrix.upstream }}/releases/latest" --jq .tag_name)
+          ours="${up}-grabzy.$(tr -d '[:space:]' < revision.txt)"
+          echo "upstream=$up" >> "$GITHUB_OUTPUT"
+          echo "ours=$ours" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags "https://github.com/$FORK.git" "refs/tags/$ours" >/dev/null; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "$ours is already tagged in $FORK"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            echo "$ours is new"
+          fi
+
+      - name: Check out upstream at that release
+        if: steps.tag.outputs.new == 'true'
+        run: |
+          # Full history: the fork may not have the parents of a shallow commit.
+          git clone --branch "${{ steps.tag.outputs.upstream }}" --recurse-submodules \
+            "https://github.com/${{ matrix.upstream }}.git" upstream
+
+      - name: Check that our patches and branding still fit
+        if: steps.tag.outputs.new == 'true'
+        id: check
+        run: python3 ci/check.py upstream "$RUNNER_TEMP/check" 2>&1 | tee "$RUNNER_TEMP/check.log"; exit "${PIPESTATUS[0]}"
+
+      - name: Apply and tag in the fork
+        if: steps.tag.outputs.new == 'true'
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          test -n "$SYNC_TOKEN" || { echo "::error::Add a SYNC_TOKEN secret, see README"; exit 1; }
+          python3 apply.py "${{ matrix.platform }}" upstream 2>&1 | tee -a "$RUNNER_TEMP/check.log"
+          cd upstream
+          git config user.name "grabzy-sync"
+          git config user.email "grabzy-sync@users.noreply.github.com"
+          git add -A
+          git commit -qm "Grabzy.CC ${{ steps.tag.outputs.ours }}" \
+            -m "ungoogled-chromium ${{ steps.tag.outputs.upstream }} with grabzy-chromium $(git -C .. rev-parse --short HEAD)"
+          git tag "${{ steps.tag.outputs.ours }}"
+          # A token, not GITHUB_TOKEN, so the tag push starts the build in the fork.
+          url="https://x-access-token:${SYNC_TOKEN}@github.com/$FORK.git"
+          git push "$url" "HEAD:refs/heads/grabzy" --force
+          git push "$url" "refs/tags/${{ steps.tag.outputs.ours }}"
+
+      - name: Report what broke
+        if: failure() && steps.tag.outputs.new == 'true'
+        run: |
+          title="${{ matrix.platform }}: ${{ steps.tag.outputs.upstream }} needs attention"
+          body=$(printf 'The daily sync could not move **%s** to ungoogled-chromium `%s`, so nothing was tagged and users stay on the last release.\n\nRun: %s\n\n```\n%s\n```\n' \
+            "${{ matrix.platform }}" "${{ steps.tag.outputs.upstream }}" \
+            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "$(tail -n 60 "$RUNNER_TEMP/check.log" 2>/dev/null)")
+          open=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$open" ]; then gh issue comment "$open" --body "$body"; else gh issue create --title "$title" --body "$body"; fi
