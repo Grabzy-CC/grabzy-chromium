@@ -35,12 +35,12 @@ def log(msg):
 
 
 def get(url):
-    for attempt in range(4):
+    for attempt in range(6):
         try:
             with urllib.request.urlopen(url, timeout=60) as r:
                 return r.read()
         except Exception as e:  # googlesource throttles bursts now and then
-            if attempt == 3:
+            if attempt == 5:
                 raise SystemExit("[check] %s: %s" % (url, e))
             time.sleep(10 * 2 ** attempt)
 
