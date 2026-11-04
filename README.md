@@ -128,7 +128,7 @@ Nothing is tagged until the check passes, so a Chromium change that breaks a pat
 
 **What happens at Chrome 167.** Our patch does not use the `BackForwardCacheForWebSocketsAllowed` policy. It changes the engine default behind that policy, so removing the policy changes nothing for us. If Chromium later removes the flag itself, our patch stops applying. The sync then opens an issue and holds the release until the patch is updated, for example by marking WebSockets as a back/forward cache blocker in `content/`. The Grabzy.CC extension also reconnects on `pageshow`, so claims keep working in the meantime.
 
-To rebuild the same upstream version after changing a patch or the branding, bump [`revision.txt`](revision.txt). The next sync tags `-grabzy.<n+1>`.
+To rebuild the same upstream version after changing a patch or the branding, bump [`revision.txt`](revision.txt). The next sync tags `-grabzy.<n+1>`. To rebuild one platform only, put its number in `revision.<platform>.txt`, which takes priority for that platform.
 
 ## Repository layout
 

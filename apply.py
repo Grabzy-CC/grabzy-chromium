@@ -140,6 +140,18 @@ def windows(root):
     write(root, ".github/workflows/build-x64.yml", WINDOWS_BUILD)
 
 
+MACOS_ESBUILD = r"""# Grabzy.CC: restore esbuild, same as github_before_build.sh
+_esbuild_version="$(/opt/homebrew/bin/esbuild --version)"
+_esbuild_module="$_root_dir/build/esbuild-node/node_modules/esbuild"
+if [[ ! -f "$_esbuild_module/package.json" ]] || \
+    [[ "$(node -p 'require(process.argv[1]).version' "$_esbuild_module/package.json")" != "$_esbuild_version" ]]; then
+  npm install --prefix "$_root_dir/build/esbuild-node" --no-save --package-lock=false --no-bin-links --ignore-scripts --omit=optional --no-audit --no-fund "esbuild@$_esbuild_version"
+fi
+rm -rf third_party/devtools-frontend/src/node_modules/esbuild
+ln -s "$_esbuild_module" third_party/devtools-frontend/src/node_modules/esbuild
+"""
+
+
 def macos(root):
     hook = 'python3 "$_main_repo/utils/patches.py" apply "$_src_dir" "$_main_repo/patches" "$_root_dir/patches"\n'
     brand = hook + 'python3 "$_root_dir/grabzy/brand.py" "$_src_dir"\n'
@@ -183,6 +195,13 @@ def macos(root):
          '    export MACOS_AD_HOC_SIGNING=1\n'
          '  fi\n')
     edit(root, "sign_and_package_app.sh", "--volname Chromium ", '--volname "Grabzy.CC" ')
+
+    # A build runs over several jobs. Only build/src is carried between them, so
+    # the esbuild package next to it is gone by the second job, and the DevTools
+    # bundles fail when ninja reaches them. Put it back at the start of every job.
+    edit(root, ".github/scripts/github_build.sh",
+         'cd "$_src_dir"\n\necho $(date +%s) | tee -a',
+         'cd "$_src_dir"\n\n' + MACOS_ESBUILD + '\necho $(date +%s) | tee -a')
 
 
 def linux(root):
