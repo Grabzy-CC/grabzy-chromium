@@ -96,6 +96,7 @@ Everything else is ungoogled-chromium, unchanged.
 | [keep-background-timers-awake](patches/keep-background-timers-awake.patch) | `blink/common/features.cc` | Turns off intensive wake-up throttling. Background tabs keep Chrome's usual limit of one wake-up per second, never one per minute. |
 | [default-to-grabzy-theme](patches/default-to-grabzy-theme.patch) | `theme_service.cc` | New profiles start dark, with the website's green (`#2EE87A`) as the colour seed. Settings › Appearance can still change both. |
 | [grabzy-updater](patches/grabzy-updater.patch) | `chrome/browser/grabzy/` | Checks this org's GitHub releases, verifies the download's SHA-256 and installs it, as described under [Updates](#updates). Chromium compiles its own update checks out of non-Google builds, so this replaces them. |
+| [grabzy-bundled-extension](patches/grabzy-bundled-extension.patch) | `external_provider_impl.cc`, `extension_downloader.cc`, `safe_manifest_parser.cc` | Installs the Grabzy.CC extension in every profile and keeps it updated from `api.grabzy.cc`, as described under [The bundled extension](#the-bundled-extension). ungoogled-chromium drops every extension update check; this starts them again for `api.grabzy.cc` only. |
 | [Branding](branding/brand.py) | strings, `BRANDING`, icons | The product is called Grabzy.CC in menus, dialogs, the installer and every translation, with our icon on every platform. |
 
 ### Theme
@@ -105,6 +106,23 @@ The browser uses the website's palette. Surfaces are near-black (`#0B0D14`), tex
 ### How the branding works
 
 [`brand.py`](branding/brand.py) runs right after the patches, with the standard library only. It renames "Chromium" in the two product string files, but keeps "Chromium OS" and "The Chromium Authors". Chromium keys each translation by a hash of its English text, so changing the English would normally send every locale back to English. `brand.py` computes grit's message IDs itself, which matches 864 of 864 IDs on 156, and moves each translation to its new ID. It stops the build if fewer than 95% of the new IDs match a translation, which would mean the hashing changed. The icons are generated from [`icon.svg`](branding/icon.svg) by [`make_icons.py`](branding/make_icons.py) and committed under [`branding/files`](branding/files).
+
+### The bundled extension
+
+Every profile gets the Grabzy.CC extension without a visit to a store. On startup the browser reads `https://api.grabzy.cc/extension/update.xml`, downloads the signed CRX it names, and installs it. It checks again on Chromium's usual extension update schedule, every few hours, and installs a newer version when the backend publishes one. The extension is installed by default, not from the store, so there is no "new extension added" prompt.
+
+- A user who removes the extension keeps it removed. It is not installed again.
+- Starting the browser with `--disable-default-apps`, as some automation tools do, skips it.
+- Only `https://api.grabzy.cc` gets update checks. Every other extension still never checks for updates, as in ungoogled-chromium.
+- The update manifest's XML namespace is `http://www.google.com/update2/response`. Domain substitution, which runs after the patches, would rewrite that string, so the patch splits it in two to keep it intact. It is a name only; nothing is fetched from it.
+
+The extension's ID is set in one place: [`branding/extension-id.txt`](branding/extension-id.txt). `brand.py` writes it into `external_provider_impl.cc` during the build. Until the file holds a real ID, the build installs no extension and logs `no extension ID`. The sync does not fail. To set it:
+
+1. On the backend, with `EXTENSION_CRX_KEY` set, run `npm run extension:id`. It prints the 32-letter ID (a-p) of the key that signs the CRX.
+2. Replace `REPLACE-WITH-EXTENSION-ID` in `branding/extension-id.txt` with it.
+3. Bump [`revision.txt`](revision.txt) in the same commit, so the next sync builds the current version again with the ID.
+
+Keep the key and the ID once they ship. A new key means a new ID, which Chromium treats as a different extension. If a later build has no ID, or a different one, Chromium removes the installed copy as an external extension its provider no longer lists.
 
 ## How new versions ship
 
@@ -134,7 +152,8 @@ To rebuild the same upstream version after changing a patch or the branding, bum
 
 ```
 patches/          our Chromium patches and their series
-branding/         brand.py, icon.svg, make_icons.py, generated icons in files/
+branding/         brand.py, icon.svg, make_icons.py, generated icons in files/,
+                  extension-id.txt (the bundled extension's ID)
 apply.py          turns an ungoogled-chromium platform checkout into Grabzy.CC
 ci/check.py       the pre-flight check sync.yml runs before tagging
 updater/          optional Windows and macOS scripts: first install, or forcing an update
@@ -176,7 +195,7 @@ All builds run on GitHub's free runners for public repos.
 
 - **Names on disk.** The app is still `Chromium.app` on macOS, and the install folder and profile folder stay `Chromium` on every platform. Renaming the bundle means renaming its helpers, framework and signing setup, which needs a test build first. Because the folders are shared, this browser and an existing Chromium or ungoogled-chromium install use the same profile. Use one or the other, or start one with `--user-data-dir`.
 - **Unsigned on Windows, ad hoc on macOS**, as described above.
-- **Not compiled locally.** The updater is new C++ code. The first CI build of each platform is its compile test.
+- **Not compiled locally.** The updater and the bundled extension are new C++ code. The first CI build of each platform is its compile test.
 - **x64 only on Windows and Linux.** The arm64 and x86 jobs are switched off to save runner time.
 
 ## Credits and licence

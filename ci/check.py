@@ -129,6 +129,7 @@ def main():
     brand.brand_strings(src, write=False)
     brand.brand_file(src, write=False, mac=False)
     brand.stamp_release(src, write=False)
+    brand.stamp_extension_id(src, write=False)
     log("check passed")
 
 
