@@ -69,6 +69,7 @@ def common(root, tag):
     shutil.rmtree(kit, ignore_errors=True)
     os.makedirs(kit)
     shutil.copyfile(os.path.join(HERE, "branding", "brand.py"), os.path.join(kit, "brand.py"))
+    shutil.copyfile(os.path.join(HERE, "branding", "extension-id.txt"), os.path.join(kit, "extension-id.txt"))
     shutil.copytree(os.path.join(HERE, "branding", "files"), os.path.join(kit, "files"))
     if tag:
         open(os.path.join(kit, "release.txt"), "w", encoding="utf-8", newline="\n").write(tag + "\n")

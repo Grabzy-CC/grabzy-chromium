@@ -19,6 +19,9 @@ library only. It does four things:
 5. Release tag: when release.txt sits next to this script (apply.py writes it
    from the tag being built), it goes into chrome/browser/grabzy/release_tag.h,
    which turns the built-in updater on. Without it the updater stays off.
+6. Bundled extension: the ID in extension-id.txt (next to this script) goes into
+   chrome/browser/extensions/external_provider_impl.cc, so every profile gets
+   the Grabzy.CC extension from api.grabzy.cc. Without an ID nothing is bundled.
 
 --check only computes and verifies, and writes nothing.
 """
@@ -231,6 +234,49 @@ def stamp_release(src, write):
     log("release tag " + tag)
 
 
+# --- 6. bundled extension ----------------------------------------------------
+
+EXTENSION_CC = "chrome/browser/extensions/external_provider_impl.cc"
+EXTENSION_MARKER = 'kGrabzyExtensionId[] = "";'
+# What extension-id.txt holds until the real ID is known.
+EXTENSION_ID_PLACEHOLDER = "REPLACE-WITH-EXTENSION-ID"
+
+
+def extension_id():
+    """The one non-comment line of extension-id.txt, or None while it is unset."""
+    path = os.path.join(HERE, "extension-id.txt")
+    if not os.path.exists(path):
+        return None
+    lines = [l.strip() for l in open(path, encoding="utf-8")]
+    values = [l for l in lines if l and not l.startswith("#")]
+    if len(values) > 1:
+        sys.exit("[brand] extension-id.txt: more than one ID")
+    value = values[0] if values else ""
+    if value in ("", EXTENSION_ID_PLACEHOLDER):
+        return None
+    # An extension ID is 32 letters a-p (the hex of a key hash, shifted).
+    if not re.fullmatch(r"[a-p]{32}", value):
+        sys.exit("[brand] extension-id.txt: %r is not an extension ID" % value)
+    return value
+
+
+def stamp_extension_id(src, write):
+    """Our extension's ID goes into the provider that installs it."""
+    path = os.path.join(src, EXTENSION_CC)
+    data = open(path, encoding="utf-8").read()
+    ext = extension_id()
+    if ext and 'kGrabzyExtensionId[] = "%s";' % ext in data:
+        return log("extension ID %s already set" % ext)
+    if EXTENSION_MARKER not in data:
+        sys.exit("[brand] %s: the extension ID placeholder is missing" % EXTENSION_CC)
+    # Not fatal, so builds keep working until the ID is set.
+    if not ext:
+        return log("no extension ID in extension-id.txt, so no extension is bundled")
+    if write:
+        open(path, "w", encoding="utf-8", newline="\n").write(
+            data.replace(EXTENSION_MARKER, 'kGrabzyExtensionId[] = "%s";' % ext))
+    log("extension ID " + ext)
+
 def brand_asset_catalog(src):
     mac = os.path.join(src, "chrome/app/theme/chromium/mac")
     with tempfile.TemporaryDirectory() as tmp:
@@ -263,6 +309,7 @@ def main():
     brand_file(src, write, mac)
     brand_icons(src, write)
     stamp_release(src, write)
+    stamp_extension_id(src, write)
     if mac and write:
         brand_asset_catalog(src)
     log("done" if write else "check passed")
