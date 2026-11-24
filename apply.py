@@ -162,6 +162,12 @@ def macos(root):
     # GitHub's own runners instead of Depot's paid ones, and only our tags.
     edit(root, ".github/workflows/build.yml", "os: depot-macos-latest", "os: macos-latest")
     edit(root, ".github/workflows/build.yml", "      - '**'\n", "      - '*-grabzy.*'\n")
+    # The fork's GITHUB_TOKEN is read-only by default, so publishing the
+    # release was refused with a 403 after the build had succeeded.
+    edit(root, ".github/workflows/build.yml",
+         "    name: Release macOS binaries of Ungoogled Chromium\n    runs-on: macos-latest\n",
+         "    name: Release macOS binaries of Ungoogled Chromium\n    runs-on: macos-latest\n"
+         "    permissions:\n      contents: write\n")
 
     for f in (".github/scripts/github_prepare_release.sh", ".github/scripts/github_generate_release_note.sh"):
         edit(root, f, '="ungoogled-chromium_', '="grabzy-chromium_', count=2)
