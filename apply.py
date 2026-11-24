@@ -153,8 +153,23 @@ ln -s "$_esbuild_module" third_party/devtools-frontend/src/node_modules/esbuild
 """
 
 
+MACOS_ANNOUNCEMENT = """Download the `arm64` disk image for Apple silicon, `x86_64` for Intel Macs.
+Open it and drag the app to Applications.
+
+These builds are signed ad hoc, not notarized, so run this once before the
+first start, or macOS reports the app as damaged:
+
+```bash
+xattr -cr /Applications/Chromium.app
+```
+
+After that the browser updates itself. See the
+[README](https://github.com/Grabzy-CC/grabzy-chromium#macos).
+"""
+
+
 def macos(root):
-    hook = 'python3 "$_main_repo/utils/patches.py" apply "$_src_dir" "$_main_repo/patches" "$_root_dir/patches"\n'
+    hook ='python3 "$_main_repo/utils/patches.py" apply "$_src_dir" "$_main_repo/patches" "$_root_dir/patches"\n'
     brand = hook + 'python3 "$_root_dir/grabzy/brand.py" "$_src_dir"\n'
     edit(root, "build.sh", hook, brand)
     edit(root, ".github/scripts/github_fetch_resources.sh", hook, brand)
@@ -178,6 +193,10 @@ def macos(root):
          '_release_tag_version="${GITHUB_REF_NAME}"\n_release_name="Grabzy.CC ${GITHUB_REF_NAME}"')
     edit(root, ".github/scripts/github_generate_release_note.sh",
          "printf '## Ungoogled-Chromium macOS %s\\n\\n'", "printf '## Grabzy.CC for macOS %s\\n\\n'")
+    # The release note quotes announcements.md. Upstream's says the builds are
+    # notarized with their maintainer's Developer ID and asks for sponsorship;
+    # neither is true of ours.
+    write(root, "announcements.md", MACOS_ANNOUNCEMENT)
 
     # Without an Apple Developer ID the app is signed ad hoc, and not notarized.
     edit(root, ".github/scripts/github_prepare_artifacts.sh",
